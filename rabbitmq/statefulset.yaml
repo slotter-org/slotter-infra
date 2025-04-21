@@ -13,7 +13,7 @@ spec:
     metadata:
       labels: { app: rabbitmq }
     spec:
-      serviceAccountName: backend # KSA bound to GSA for SM access
+      serviceAccountName: rabbit # KSA bound to GSA for SM access
       terminationGracePeriodSeconds: 30
 
       # CSI volume (SM → files)
