@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-slotter-config
+  namespace: slotter
+data:
+  VITE_API_BASE_URL: "http://www.slotter.ai/api"

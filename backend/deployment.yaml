@@ -1,0 +1,221 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-slotter
+  namespace: slotter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-slotter
+  template:
+    metadata:
+      labels:
+        app: backend-slotter
+    spec:
+      shareProcessNamespace: true
+      serviceAccountName: backend
+
+      # ─────────── VOLUMES ──────────────────────────────────────────
+      volumes:
+        - name: gcp-secrets # Secret Manager → CSI driver
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: backend-secrets
+
+      # ─────────── CONTAINERS ──────────────────────────────────────
+      containers:
+        # (A)  Slotter backend API
+        - name: backend-slotter
+          image: yungbote18/backend-slotter:latest
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 8080
+
+          volumeMounts:
+            - name: gcp-secrets
+              mountPath: /var/secrets
+              readOnly: true
+
+          env:
+            # ---- static DB host (Auth‑proxy) ----
+            - name: POSTGRES_HOST
+              value: "127.0.0.1"
+            - name: POSTGRES_PORT
+              value: "5432"
+
+            # ---- ConfigMap values ----
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: POSTGRES_NAME
+            - name: REDIS_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: REDIS_ADDRESS
+            - name: GCS_BUCKET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: GCS_BUCKET_NAME
+            - name: CDN_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: CDN_DOMAIN
+            - name: SLOTTER_BRAND_LOGO_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: SLOTTER_BRAND_LOGO_PATH
+            - name: SENDGRID_SUPPORT_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: SENDGRID_SUPPORT_EMAIL
+            - name: SENDGRID_INVITATION_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: SENDGRID_INVITATION_EMAIL
+            - name: SENDGRID_AUTHORIZATION_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: SENDGRID_AUTHORIZATION_EMAIL
+            - name: AVATAR_COLORS_JSON_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: AVATAR_COLORS_JSON_PATH
+            - name: AVATAR_FONT
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: AVATAR_FONT
+            - name: SEED_PERMISSION_JSON_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: SEED_PERMISSION_JSON_PATH
+            - name: ASSET_DIR_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: ASSET_DIR_PATH
+            - name: WMS_ASSET_DIR_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: WMS_ASSET_DIR_PATH
+            - name: COMPANY_ASSET_DIR_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: COMPANY_ASSET_DIR_PATH
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: RABBITMQ_DEFAULT_USER
+            - name: LOG_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: LOG_MODE
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: PORT
+            - name: ACCESS_TOKEN_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: ACCESS_TOKEN_TTL
+            - name: REFRESH_TOKEN_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: REFRESH_TOKEN_TTL
+
+            # ---- Secret values (synced via CSI) ----
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: GCP_PROJECT_ID
+            - name: GOOGLE_APPLICATION_CREDENTIALS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SENDGRID_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: SENDGRID_API_KEY
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: TWILIO_ACCOUNT_SID
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: TWILIO_AUTH_TOKEN
+            - name: TWILIO_RECOVERY_CODE
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: TWILIO_RECOVERY_CODE
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: backend-slotter-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+
+        # (B)  Cloud SQL Auth Proxy
+        - name: cloudsql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2-alpine
+          args:
+            - "--structured-logs"
+            - "--private-ip"
+            - "instance=$(INSTANCE_CONNECTION_NAME)"
+            - "--port=5432"
+          env:
+            - name: INSTANCE_CONNECTION_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-slotter-config
+                  key: INSTANCE_CONNECTION_NAME
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          ports:
+            - name: psql
+              containerPort: 5432

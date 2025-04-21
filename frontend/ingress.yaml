@@ -1,0 +1,46 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: slotter-ingress
+  namespace: slotter
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: slotter-ip
+    networking.gke.io/managed-certificates: slotter-cert # <── spelling
+    networking.gke.io/ssl-redirect: "true"
+spec:
+  ingressClassName: gce
+  rules:
+    - host: slotter.ai
+      http:
+        paths:
+          - path: /api # <── remove * ; Prefix matches /api/*
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-slotter
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-slotter
+                port:
+                  number: 80
+    - host: www.slotter.ai
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-slotter
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-slotter
+                port:
+                  number: 80
