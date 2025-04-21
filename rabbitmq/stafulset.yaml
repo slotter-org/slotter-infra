@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: messaging
+spec:
+  serviceName: rabbitmq-internal # headless service name
+  replicas: 3
+  selector:
+    matchLabels: { app: rabbitmq }
+
+  template: # ── Pod template ────────────────
+    metadata:
+      labels: { app: rabbitmq }
+    spec:
+      serviceAccountName: backend # KSA bound to GSA for SM access
+      terminationGracePeriodSeconds: 30
+
+      # CSI volume (SM → files)
+      volumes:
+        - name: gcp-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: rabbitmq-secrets
+
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.13-management
+          ports:
+            - { name: amqp, containerPort: 5672 }
+            - { name: http, containerPort: 15672 }
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-auth
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-auth
+                  key: RABBITMQ_DEFAULT_PASS
+          volumeMounts:
+            - name: gcp-secrets
+              mountPath: /var/secrets
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/rabbitmq
+          resources:
+            requests: { cpu: "200m", memory: "512Mi" }
+            limits: { cpu: "1", memory: "2Gi" }
+
+  volumeClaimTemplates: # ── per‑pod persistent SSD ──────
+    - metadata:
+        name: data
+      spec:
+        storageClassName: pd-ssd
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
