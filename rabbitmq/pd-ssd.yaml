@@ -6,5 +6,4 @@ provisioner: pd.csi.storage.gke.io
 volumeBindingMode: WaitForFirstConsumer
 parameters:
   type: pd-ssd
-  replication-type: regional
 reclaimPolicy: Delete
